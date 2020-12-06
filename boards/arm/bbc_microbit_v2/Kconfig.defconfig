@@ -1,0 +1,19 @@
+# nRF52 BBC_MICROBIT_V2 board configuration
+
+# Copyright (c) 2020 Endian Tecnologies AB
+# SPDX-License-Identifier: Apache-2.0
+
+# Based on BBC Microbit implementation made by Nordic Semiconductor ASA
+
+if BOARD_BBC_MICROBIT_V2
+
+config BOARD
+	default "bbc_microbit_v2"
+
+config BT_CTLR
+	default BT
+
+config LOG_BUFFER_SIZE
+	default 128 if LOG
+
+endif # BOARD_BBC_MICROBIT_V2
