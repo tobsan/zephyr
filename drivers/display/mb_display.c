@@ -24,6 +24,8 @@
 
 #define MODE_MASK    BIT_MASK(16)
 
+#ifdef CONFIG_BOARD_BBC_MICROBIT
+
 /* Onboard LED Row 1 */
 #define LED_ROW1_GPIO_PIN   13
 #define LED_ROW1_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
@@ -76,6 +78,48 @@
 #define DISPLAY_ROWS 3
 #define DISPLAY_COLS 9
 
+#elif CONFIG_BOARD_BBC_MICROBIT_V2
+
+/* Onboard LED Rows */
+#define LED_ROW1_GPIO_PIN   21
+#define LED_ROW1_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+#define LED_ROW2_GPIO_PIN   22
+#define LED_ROW2_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+#define LED_ROW3_GPIO_PIN   15
+#define LED_ROW3_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+#define LED_ROW4_GPIO_PIN   24
+#define LED_ROW4_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+#define LED_ROW5_GPIO_PIN   19
+#define LED_ROW5_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+/* Onboard LED cols */
+#define LED_COL1_GPIO_PIN   28
+#define LED_COL1_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+#define LED_COL2_GPIO_PIN   11
+#define LED_COL2_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+#define LED_COL3_GPIO_PIN   31
+#define LED_COL3_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+#define LED_COL4_GPIO_PIN   5
+#define LED_COL4_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio1))
+
+#define LED_COL5_GPIO_PIN   30
+#define LED_COL5_GPIO_PORT  DT_LABEL(DT_NODELABEL(gpio0))
+
+
+#define DISPLAY_ROWS 5
+#define DISPLAY_COLS 5
+
+#else
+    #error "mb_display only works with BBC Micro:Bit boards"
+#endif
+
 #define SCROLL_OFF   0
 #define SCROLL_START 1
 
@@ -83,6 +127,9 @@
 
 struct mb_display {
 	const struct device *dev;         /* GPIO device */
+#ifdef CONFIG_BOARD_BBC_MICROBIT_V2
+    const struct device *dev_col4;    /* GPIO device 2 */
+#endif
 
 	struct k_timer  timer;       /* Rendering timer */
 
@@ -98,7 +145,11 @@ struct mb_display {
 
 	/* The following variables track the currently shown image */
 	uint8_t            cur;         /* Currently rendered row */
+#ifdef CONFIG_BOARD_BBC_MICROBIT
 	uint32_t           row[3];      /* Content (columns) for each row */
+#elif CONFIG_BOARD_BBC_MICROBIT_V2
+	uint32_t           row[5];      /* Content (columns) for each row */
+#endif
 	int64_t           expiry;      /* When to stop showing current image */
 	int32_t           duration;    /* Duration for each shown image */
 
@@ -120,14 +171,49 @@ struct x_y {
  * The top left corner has the coordinates 0,0.
  */
 static const struct x_y map[DISPLAY_ROWS][DISPLAY_COLS] = {
+#ifdef CONFIG_BOARD_BBC_MICROBIT
 	{{0, 0}, {2, 0}, {4, 0}, {4, 3}, {3, 3}, {2, 3}, {1, 3}, {0, 3}, {1, 2} },
 	{{4, 2}, {0, 2}, {2, 2}, {1, 0}, {3, 0}, {3, 4}, {1, 4}, {0, 0}, {0, 0} },
 	{{2, 4}, {4, 4}, {0, 4}, {0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {3, 2} },
+#elif CONFIG_BOARD_BBC_MICROBIT_V2
+    {{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}},
+    {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}},
+    {{0, 2}, {1, 2}, {2, 2}, {3, 2}, {4, 2}},
+    {{0, 3}, {1, 3}, {2, 3}, {3, 3}, {4, 3}},
+    {{0, 4}, {1, 4}, {2, 4}, {3, 4}, {4, 4}},
+#endif
 };
 
-/* Mask of all the column bits */
+/* MicroBit v1 uses 9 cols and 3 rows. v2 uses 5 cols and 5 rows */
+static const uint8_t rows[] = {
+    LED_ROW1_GPIO_PIN, LED_ROW2_GPIO_PIN, LED_ROW3_GPIO_PIN,
+#ifdef CONFIG_BOARD_BBC_MICROBIT_V2
+    LED_ROW4_GPIO_PIN, LED_ROW5_GPIO_PIN,
+#endif
+};
+
+/* MicroBit v1 uses 9 cols and 3 rows. v2 uses 5 cols and 5 rows */
+static const uint8_t cols[] = {
+    LED_COL1_GPIO_PIN, LED_COL2_GPIO_PIN,
+    LED_COL3_GPIO_PIN, LED_COL4_GPIO_PIN,
+    LED_COL5_GPIO_PIN,
+#ifdef CONFIG_BOARD_BBC_MICROBIT
+    LED_COL6_GPIO_PIN, LED_COL7_GPIO_PIN,
+    LED_COL8_GPIO_PIN, LED_COL9_GPIO_PIN,
+#endif
+};
+
+/* Mask of all the column bits. On the v1 the GPIOs all come in a sequence,
+ * which they don't on the v2 */
+#ifdef CONFIG_BOARD_BBC_MICROBIT
 static const uint32_t col_mask = (((~0UL) << LED_COL1_GPIO_PIN) &
 			       ((~0UL) >> (31 - LED_COL9_GPIO_PIN)));
+#elif CONFIG_BOARD_BBC_MICROBIT_V2
+static const uint32_t col_mask = (
+        ((~0UL) << LED_COL1_GPIO_PIN) | ((~0UL) << LED_COL2_GPIO_PIN) |
+        ((~0UL) << LED_COL3_GPIO_PIN) | ((~0UL) << LED_COL4_GPIO_PIN) |
+        ((~0UL) << LED_COL5_GPIO_PIN));
+#endif
 
 static inline const struct mb_image *get_font(char ch)
 {
@@ -150,12 +236,12 @@ static void start_image(struct mb_display *disp, const struct mb_image *img)
 
 		for (col = 0; col < DISPLAY_COLS; col++) {
 			if (GET_PIXEL(img, map[row][col].x, map[row][col].y)) {
-				disp->row[row] |= BIT(LED_COL1_GPIO_PIN + col);
+				disp->row[row] |= BIT(cols[col]);
 			}
 		}
 
 		disp->row[row] = ~disp->row[row] & col_mask;
-		disp->row[row] |= BIT(LED_ROW1_GPIO_PIN + row);
+		disp->row[row] |= BIT(rows[row]);
 	}
 
 	disp->cur = 0U;
@@ -169,22 +255,29 @@ static void start_image(struct mb_display *disp, const struct mb_image *img)
 	k_timer_start(&disp->timer, K_NO_WAIT, K_MSEC(4));
 }
 
-#define ROW_PIN(n) (LED_ROW1_GPIO_PIN + (n))
 
 static inline void update_pins(struct mb_display *disp, uint32_t val)
 {
-	uint32_t pin, prev = (disp->cur + 2) % 3;
+    uint8_t pin_index;
+    uint32_t pin, prev = (disp->cur + (DISPLAY_COLS - 1)) % DISPLAY_COLS;
 
 	/* Disable the previous row */
-	gpio_pin_set_raw(disp->dev, ROW_PIN(prev), 0);
+	gpio_pin_set_raw(disp->dev, rows[prev], 0);
 
 	/* Set the column pins to their correct values */
-	for (pin = LED_COL1_GPIO_PIN; pin <= LED_COL9_GPIO_PIN; pin++) {
-		gpio_pin_set_raw(disp->dev, pin, !!(val & BIT(pin)));
+	for (pin_index = 0; pin_index < DISPLAY_COLS; pin_index++) {
+        pin = cols[pin_index];
+#ifdef CONFIG_BOARD_BBC_MICROBIT_V2
+        if (pin == LED_COL4_GPIO_PIN) {
+		    gpio_pin_set_raw(disp->dev_col4, pin, !!(val & BIT(pin)));
+        } else {
+#endif
+		    gpio_pin_set_raw(disp->dev, pin, !!(val & BIT(pin)));
+        }
 	}
 
 	/* Enable the new row */
-	gpio_pin_set_raw(disp->dev, ROW_PIN(disp->cur), 1);
+	gpio_pin_set_raw(disp->dev, rows[disp->cur], 1);
 }
 
 static void reset_display(struct mb_display *disp)
@@ -431,13 +524,16 @@ static int mb_display_init(const struct device *dev)
 	ARG_UNUSED(dev);
 
 	display.dev = device_get_binding(DT_LABEL(DT_NODELABEL(gpio0)));
+	display.dev_col4 = device_get_binding(DT_LABEL(DT_NODELABEL(gpio1)));
 
 	__ASSERT(dev, "No GPIO device found");
 
+#ifdef CONFIG_BOARD_BBC_MICROBIT
 	gpio_pin_configure(display.dev, LED_ROW1_GPIO_PIN, GPIO_OUTPUT);
 	gpio_pin_configure(display.dev, LED_ROW2_GPIO_PIN, GPIO_OUTPUT);
 	gpio_pin_configure(display.dev, LED_ROW3_GPIO_PIN, GPIO_OUTPUT);
-	gpio_pin_configure(display.dev, LED_COL1_GPIO_PIN, GPIO_OUTPUT);
+
+    gpio_pin_configure(display.dev, LED_COL1_GPIO_PIN, GPIO_OUTPUT);
 	gpio_pin_configure(display.dev, LED_COL2_GPIO_PIN, GPIO_OUTPUT);
 	gpio_pin_configure(display.dev, LED_COL3_GPIO_PIN, GPIO_OUTPUT);
 	gpio_pin_configure(display.dev, LED_COL4_GPIO_PIN, GPIO_OUTPUT);
@@ -446,6 +542,19 @@ static int mb_display_init(const struct device *dev)
 	gpio_pin_configure(display.dev, LED_COL7_GPIO_PIN, GPIO_OUTPUT);
 	gpio_pin_configure(display.dev, LED_COL8_GPIO_PIN, GPIO_OUTPUT);
 	gpio_pin_configure(display.dev, LED_COL9_GPIO_PIN, GPIO_OUTPUT);
+#elif CONFIG_BOARD_BBC_MICROBIT_V2
+	gpio_pin_configure(display.dev, LED_ROW1_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev, LED_ROW2_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev, LED_ROW3_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev, LED_ROW4_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev, LED_ROW5_GPIO_PIN, GPIO_OUTPUT);
+
+	gpio_pin_configure(display.dev, LED_COL1_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev, LED_COL2_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev, LED_COL3_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev_col4, LED_COL4_GPIO_PIN, GPIO_OUTPUT);
+	gpio_pin_configure(display.dev, LED_COL5_GPIO_PIN, GPIO_OUTPUT);
+#endif
 
 	return 0;
 }
